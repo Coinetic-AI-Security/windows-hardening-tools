@@ -4,7 +4,7 @@
 .AUTHOR Coinetic AI Security - https://coinetic.io
 .COMPANYNAME Coinetic AI Security
 .COPYRIGHT (c) 2026 Salus Alpha Group AG. MIT licence.
-.TAGS Windows WindowsServer Security Hardening Firewall RDP SMB Audit Checklist CIS
+.TAGS Coinetic Windows WindowsServer Security Hardening Firewall RDP SMB Audit Checklist CIS
 .LICENSEURI https://github.com/Coinetic-AI-Security/windows-hardening-tools/blob/main/LICENSE
 .PROJECTURI https://github.com/Coinetic-AI-Security/windows-hardening-tools
 .ICONURI https://coinetic.io/logo-192.png
