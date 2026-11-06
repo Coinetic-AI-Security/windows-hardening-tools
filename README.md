@@ -63,4 +63,4 @@ Found a false alarm or a check that should be added? [Open an issue](https://git
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Salus Alpha Group AG
+[MIT](LICENSE) © 2026 [Coinetic AI Security](https://coinetic.io) (Salus Alpha Group AG)

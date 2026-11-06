@@ -1,14 +1,14 @@
 <#PSScriptInfo
-.VERSION 1.0.0
+.VERSION 1.0.1
 .GUID 6f4b1f3e-2c8a-4d57-9a61-3b0e7c5d9a21
 .AUTHOR Coinetic AI Security - https://coinetic.io
 .COMPANYNAME Coinetic AI Security
-.COPYRIGHT (c) 2026 Salus Alpha Group AG. MIT licence.
+.COPYRIGHT (c) 2026 Coinetic AI Security - https://coinetic.io (Salus Alpha Group AG). MIT licence.
 .TAGS Coinetic Windows WindowsServer Security Hardening Firewall RDP SMB Audit Checklist CIS
 .LICENSEURI https://github.com/Coinetic-AI-Security/windows-hardening-tools/blob/main/LICENSE
 .PROJECTURI https://github.com/Coinetic-AI-Security/windows-hardening-tools
 .ICONURI https://coinetic.io/logo-192.png
-.RELEASENOTES First release: firewall, open ports, RDP, SMB, updates, accounts and logging checks.
+.RELEASENOTES 1.0.1: copyright and credit name Coinetic AI Security - https://coinetic.io. 1.0.0: firewall, open ports, RDP, SMB, updates, accounts and logging checks.
 #>
 
 <#
