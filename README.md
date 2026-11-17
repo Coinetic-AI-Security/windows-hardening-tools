@@ -1,6 +1,6 @@
 # Windows hardening tools
 
-**Is your Windows Server hardened?** `Test-WindowsServerHardening.ps1` checks the network and logon side of a Windows Server or PC in about 10 seconds: firewall, open admin ports, RDP, SMB, updates, local accounts and logging. Each finding links to the explanation and the fix.
+**Is your Windows Server hardened?** `Test-WindowsServerHardening.ps1` checks the network and logon side of a Windows Server or PC, usually within a minute: firewall, open admin ports, RDP, SMB, updates, local accounts and logging. Each finding links to the explanation and the fix.
 
 ![Example output](docs/example.png)
 
@@ -18,6 +18,8 @@ Invoke-WebRequest https://raw.githubusercontent.com/Coinetic-AI-Security/windows
 Unblock-File .\Test-WindowsServerHardening.ps1
 .\Test-WindowsServerHardening.ps1
 ```
+
+Or from the [PowerShell Gallery](https://www.powershellgallery.com/packages/Test-WindowsServerHardening): `Install-Script Test-WindowsServerHardening`
 
 If your execution policy blocks scripts: `powershell -ExecutionPolicy Bypass -File .\Test-WindowsServerHardening.ps1` (applies to this one run only).
 
@@ -40,6 +42,7 @@ Invoke-Command -ComputerName SRV1, SRV2 -FilePath .\Test-WindowsServerHardening.
 | SMB | SMBv1 server and client, SMB signing (required on domain controllers) | [SMB and old protocols](https://coinetic.io/windows-server-hardening-checklist#smb) |
 | Accounts | Guest account, built-in Administrator, LAPS | [Accounts and passwords](https://coinetic.io/windows-server-hardening-checklist#accounts) |
 | Logging | audit policy for logons, lockouts, credential validation and account changes; advanced audit policy enforced; Security log size | [Logging](https://coinetic.io/windows-server-hardening-checklist#logging) |
+| Backups | reminder only - an offline / immutable copy cannot be checked by a script | [Backups](https://coinetic.io/windows-server-hardening-checklist#backups) |
 
 Status: **OK** · **WARN** with severity High / Medium / Low · **INFO** (worth knowing, not wrong) · **SKIP** (could not be checked, e.g. without admin rights).
 
@@ -64,3 +67,7 @@ Found a false alarm or a check that should be added? [Open an issue](https://git
 ## Licence
 
 [MIT](LICENSE) © 2026 [Coinetic AI Security](https://coinetic.io) (Salus Alpha Group AG)
+
+---
+
+Coinetic AI Security - https://coinetic.io

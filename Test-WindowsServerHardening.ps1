@@ -1,5 +1,5 @@
 <#PSScriptInfo
-.VERSION 1.0.1
+.VERSION 1.0.2
 .GUID 6f4b1f3e-2c8a-4d57-9a61-3b0e7c5d9a21
 .AUTHOR Coinetic AI Security - https://coinetic.io
 .COMPANYNAME Coinetic AI Security
@@ -8,7 +8,7 @@
 .LICENSEURI https://github.com/Coinetic-AI-Security/windows-hardening-tools/blob/main/LICENSE
 .PROJECTURI https://github.com/Coinetic-AI-Security/windows-hardening-tools
 .ICONURI https://coinetic.io/logo-192.png
-.RELEASENOTES 1.0.1: copyright and credit name Coinetic AI Security - https://coinetic.io. 1.0.0: firewall, open ports, RDP, SMB, updates, accounts and logging checks.
+.RELEASENOTES 1.0.2: the update check no longer counts the Malicious Software Removal Tool or Defender intelligence updates; the report still runs where Add-Type is blocked (Constrained Language Mode); LAPS text on domain controllers. 1.0.1: copyright and credit name Coinetic AI Security - https://coinetic.io. 1.0.0: firewall, open ports, RDP, SMB, updates, accounts and logging checks.
 #>
 
 <#
@@ -96,9 +96,11 @@ Invoke-Check 'Updates' 'Security updates installed recently' 'updates' {
     try {   # Windows Update history: the newest successfully installed update (ResultCode 2 = succeeded)
         $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher()
         $n = $s.GetTotalHistoryCount()
-        if ($n -gt 0) { $last = $s.QueryHistory(0, [Math]::Min($n, 200)) | Where-Object { $_.ResultCode -eq 2 -and $_.Operation -eq 1 } | Sort-Object Date -Descending | Select-Object -First 1 -ExpandProperty Date }
+        if ($n -gt 0) { $last = $s.QueryHistory(0, [Math]::Min($n, 200)) | Where-Object { $_.ResultCode -eq 2 -and $_.Operation -eq 1 -and $_.Title -notmatch 'KB890830|Malicious Software Removal|Security Intelligence|Definition Update|Antimalware platform|KB2267602|KB4052623' } | Sort-Object Date -Descending | Select-Object -First 1 -ExpandProperty Date }
     } catch { }
-    if (-not $last) { $last = Get-HotFix | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending | Select-Object -First 1 -ExpandProperty InstalledOn }
+    # not counted: the Malicious Software Removal Tool and Microsoft Defender intelligence / platform updates - they come even
+    # when the Windows security updates are stuck
+    if (-not $last) { $last = Get-HotFix | Where-Object { $_.InstalledOn -and $_.HotFixID -ne 'KB890830' } | Sort-Object InstalledOn -Descending | Select-Object -First 1 -ExpandProperty InstalledOn }
     if (-not $last) { Add-Result 'Updates' 'Security updates installed recently' 'WARN' 'Medium' 'No installed update found in the update history.' 'updates'; return }
     $age = [int]((Get-Date) - $last.ToLocalTime()).TotalDays
     if ($age -gt 45) { Add-Result 'Updates' 'Security updates installed recently' 'WARN' 'High' "Last update installed $age days ago ($($last.ToString('yyyy-MM-dd'))). Microsoft releases security updates every month." 'updates' }
@@ -222,7 +224,8 @@ Invoke-Check 'Accounts' 'Local accounts' 'accounts' {
 }
 
 Invoke-Check 'Accounts' 'Unique local admin passwords (LAPS)' 'accounts' {
-    if (-not $Cs.PartOfDomain -or $IsDC) { Add-Result 'Accounts' 'Unique local admin passwords (LAPS)' 'INFO' '' 'Not a domain member Server/PC - use a unique, long local admin password.' 'accounts'; return }
+    if ($IsDC) { Add-Result 'Accounts' 'Unique local admin passwords (LAPS)' 'INFO' '' 'Domain controller: it has no local accounts. Windows LAPS can manage its Directory Services Restore Mode (DSRM) password.' 'accounts'; return }
+    if (-not $Cs.PartOfDomain) { Add-Result 'Accounts' 'Unique local admin passwords (LAPS)' 'INFO' '' 'Not a domain member Server/PC - use a unique, long local admin password.' 'accounts'; return }
     $win = (Get-RegValue 'HKLM:\SOFTWARE\Microsoft\Policies\LAPS' 'BackupDirectory'), (Get-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LAPS' 'BackupDirectory') | Where-Object { $null -ne $_ -and $_ -ne 0 }
     $legacy = Get-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd' 'AdmPwdEnabled'
     if ($win -or $legacy -eq 1) { Add-Result 'Accounts' 'Unique local admin passwords (LAPS)' 'OK' '' 'LAPS is configured.' 'accounts' }
@@ -230,31 +233,44 @@ Invoke-Check 'Accounts' 'Unique local admin passwords (LAPS)' 'accounts' {
 }
 
 # ---------------------------------------------------------------- 7. Logging
-if (-not ('HardeningCheck.Audit' -as [type])) {
-    Add-Type -TypeDefinition @'
+# AuditQuerySystemPolicy (advapi32) - names as in Microsoft's documentation of AUDIT_POLICY_INFORMATION
+$AuditApi = $true
+if (-not ('HardeningCheck.AuditPolicy' -as [type])) {
+    try {
+        Add-Type -ErrorAction Stop -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
 namespace HardeningCheck {
-  public static class Audit {
-    [StructLayout(LayoutKind.Sequential)] struct AUDIT_POLICY_INFORMATION { public Guid Sub; public uint Info; public Guid Cat; }
-    [DllImport("advapi32.dll", SetLastError = true)] static extern bool AuditQuerySystemPolicy([In] Guid[] subs, uint count, out IntPtr policy);
-    [DllImport("advapi32.dll")] static extern void AuditFree(IntPtr buffer);
-    // 1 = success, 2 = failure, 3 = both, 0 = none; -1 = not readable (needs administrator)
-    public static int Get(Guid sub) {
-      IntPtr p; if (!AuditQuerySystemPolicy(new[] { sub }, 1, out p)) return -1;
-      try { return (int)((AUDIT_POLICY_INFORMATION)Marshal.PtrToStructure(p, typeof(AUDIT_POLICY_INFORMATION))).Info & 3; } finally { AuditFree(p); }
+  public static class AuditPolicy {
+    public const uint POLICY_AUDIT_EVENT_SUCCESS = 0x1, POLICY_AUDIT_EVENT_FAILURE = 0x2;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AUDIT_POLICY_INFORMATION { public Guid AuditSubCategoryGuid; public uint AuditingInformation; public Guid AuditCategoryGuid; }
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool AuditQuerySystemPolicy(Guid[] pSubCategoryGuids, uint dwPolicyCount, out IntPtr ppAuditPolicy);
+    [DllImport("advapi32.dll")]
+    static extern void AuditFree(IntPtr Buffer);
+    // success / failure bits of one subcategory; -1 = not readable (needs administrator)
+    public static int Query(Guid subCategory) {
+      IntPtr buffer;
+      if (!AuditQuerySystemPolicy(new Guid[] { subCategory }, 1, out buffer)) return -1;
+      try {
+        AUDIT_POLICY_INFORMATION info = (AUDIT_POLICY_INFORMATION)Marshal.PtrToStructure(buffer, typeof(AUDIT_POLICY_INFORMATION));
+        return (int)(info.AuditingInformation & (POLICY_AUDIT_EVENT_SUCCESS | POLICY_AUDIT_EVENT_FAILURE));
+      } finally { AuditFree(buffer); }
     }
   }
 }
 '@
+    } catch { $AuditApi = $false }   # e.g. Constrained Language Mode: the audit check is skipped, the rest of the report stays
 }
 
 Invoke-Check 'Logging' 'Audit policy' 'logging' {
     if (-not $IsAdmin) { Add-Result 'Logging' 'Audit policy' 'SKIP' '' 'Needs administrator rights.' 'logging'; return }
+    if (-not $AuditApi) { Add-Result 'Logging' 'Audit policy' 'SKIP' '' 'Not readable in this PowerShell session (e.g. Constrained Language Mode) - check with: auditpol /get /category:*' 'logging'; return }
     $need = [ordered]@{ 'Logon' = @('0CCE9215-69AE-11D9-BED3-505054503030', 3); 'Account Lockout' = @('0CCE9217-69AE-11D9-BED3-505054503030', 2)
         'Credential Validation' = @('0CCE923F-69AE-11D9-BED3-505054503030', 2); 'User Account Management' = @('0CCE9235-69AE-11D9-BED3-505054503030', 1) }
     $names = @{ 0 = 'No auditing'; 1 = 'Success'; 2 = 'Failure'; 3 = 'Success and Failure' }
     foreach ($k in $need.Keys) {
-        $v = [HardeningCheck.Audit]::Get([guid]$need[$k][0]); $want = $need[$k][1]
+        $v = [HardeningCheck.AuditPolicy]::Query([guid]$need[$k][0]); $want = $need[$k][1]
         if ($v -lt 0) { Add-Result 'Logging' "Audit: $k" 'SKIP' '' 'Not readable.' 'logging' }
         elseif (($v -band $want) -eq $want) { Add-Result 'Logging' "Audit: $k" 'OK' '' $names[$v] 'logging' }
         else { Add-Result 'Logging' "Audit: $k" 'WARN' 'Medium' "$($names[$v]) - recommended: $($names[$want])." 'logging' }
